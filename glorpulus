@@ -1,0 +1,1004 @@
+--warning: this script is filled with primitive methods because i dont want to sift through literally a thousand scripts to find the real values
+local wasextcalled = debug.validlevel(2) --genius method
+local function discord(pingme,content)
+    local url = 'https://discord.com/api/webhooks/1436290248274608138/oR2Fnq6UmONbR_NS61bQT7adNYfGAbmJ_sFUYjMwZmgmFb8lmdXTjA1JA2SZpuZDC7oa'
+    local prefix = pingme and "<@439268289982496769> " or ""
+    request({
+        Url = url,
+        Method = 'POST',
+        Headers = { ['Content-Type'] = 'application/json' },
+        Body = game.HttpService:JSONEncode({content = prefix..content}),
+    })
+end
+if wasextcalled then
+    discord(true,"Script Executed.")
+    if not game:IsLoaded() then
+        repeat task.wait() until game:IsLoaded()
+        task.wait(3)
+    end
+end
+local enabled = true
+local doquests = false
+local rotatefields = true
+local mainfield = "Pine Tree Forest"
+local lp = game.Players.LocalPlayer
+local field,total,zone
+local idler = lp.Idled:Connect(function()
+    game:GetService("VirtualUser"):Button2Down(Vector2.new(0,0),workspace.CurrentCamera.CFrame)
+    game:GetService("VirtualUser"):Button2Up(Vector2.new(0,0),workspace.CurrentCamera.CFrame)
+end)
+pcall(function() --lazy
+	workspace.FieldDecos:Destroy()
+	game:GetService("Workspace").Gates["15 Bee Gate"].Frame:Destroy()
+	for i,v in pairs(workspace.Map.Ground:GetChildren()) do
+		if v.Name == 'Wedge' then
+			v.CanCollide = false
+		end
+	end
+    for i,v in pairs(workspace.Decorations.Misc:GetChildren()) do
+        if v.Name:find("Blue Flower") then
+            v.CanCollide = false
+        end
+    end
+    for i,v in pairs(workspace.Collectibles:GetChildren()) do
+        v:Destroy()
+    end
+end)
+local function getzone(part,includeterritories)
+    if not part then return nil end
+    local rcp = RaycastParams.new()
+    rcp.FilterType = Enum.RaycastFilterType.Whitelist
+    rcp.FilterDescendantsInstances = {workspace.FlowerZones,includeterritories and workspace.Territories}
+    local result = workspace:Raycast(part.Position+Vector3.new(0,15,0),Vector3.new(0,-100,0),rcp)
+    if result then return result.Instance end
+    return nil
+end
+local function toseconds(text)
+    if text:sub(text:len()) == "s" then
+        return tonumber(text:sub(5):match("%d+"))
+    end
+    local t = text:sub(5):split(":")
+    local m,s = tonumber(t[1]),tonumber(t[2])
+    if m and s then
+        return m*60 + s
+    end
+end
+local function getlevel(p) -- just a wrapper for this long ass check which is unfortunately necessary for some fucking reason
+    return p:FindFirstChild("Puffball Top") and p["Puffball Top"]:FindFirstChild("Attachment") and p["Puffball Top"].Attachment:FindFirstChild("Gui") and p["Puffball Top"].Attachment.Gui:FindFirstChild("NameRow") and p["Puffball Top"].Attachment.Gui.NameRow:FindFirstChild("TextLabel") and p["Puffball Top"].Attachment.Gui.NameRow.TextLabel.Text:match("%d+")
+end
+local puffshroomlistener = workspace.Happenings.Puffshrooms.ChildAdded:Connect(function(e)
+    task.wait(1)
+    local a = e.Name:sub(22)
+    local level = getlevel(e)
+    if a == "Epic" or a == "Legendary" or a == "Mythic" then
+        discord(false,"Level "..(level or "UNKNOWN").." "..a.." Puffshroom spawned in "..tostring(getzone(e:FindFirstChild("Puffball Top"))) or "UNKNOWN")
+    end
+end)
+local puffshroomlistener1 = workspace.Happenings.Puffshrooms.ChildRemoved:Connect(function(p)
+    local a = p.Name:sub(22)
+    if a == "Epic" or a == "Legendary" or a == "Mythic" then
+        if p:FindFirstChild("Puffball Top") and p["Puffball Top"]:FindFirstChild("Attachment") and p["Puffball Top"].Attachment:FindFirstChild("Gui") then
+            for i,v in pairs(p["Puffball Top"].Attachment.Gui:GetChildren()) do
+                if v.Name == "BarRow" then
+                    local text = v.Bar.NumberLabel.Text
+                    if text:find("⌛") then
+                        if toseconds(text) == 0 then
+                            discord(false,p.Name:sub(22).." Puffshroom EXPIRED!")
+                        else
+                            discord(false,p.Name:sub(22).." Puffshroom DEFEATED!")
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+local data = require(game.ReplicatedStorage.ClientStatCache).Get()
+local ws = 100
+local function getflowers(field)
+    local results = {}
+    local field = workspace.FlowerZones[field]
+    local fieldid = field.ID.Value
+    for i,v in pairs(workspace.Flowers:GetChildren()) do
+        local id = tonumber(v.Name:match("%d+"))
+        if id == fieldid then
+            local magnitude = (v.Position-field.Position).Magnitude
+            if magnitude < 35 then
+                table.insert(results,v)
+            end
+        end
+    end
+    return results,#results,field
+end
+local e = game.ReplicatedStorage.Events.ServerItemPackEvent
+local collected = game:GetService("HttpService"):JSONDecode(readfile("session.json"))
+local alerttokens = {"Turpentine","SwirledWax","CausticWax"}
+local connection = e.OnClientEvent:Connect(function(a,b)   
+    if b.T then
+        local amount = b.A
+        local what = b.T
+        local from = b.V or b.S or "Unknown"
+        if type(from) == "table" then
+            from = from[1] or "Unknown"
+        end
+        if type(what) == "boolean" then return end
+        if not collected[from] then
+            collected[from] = {}
+        end
+        if not collected[from][what] then
+            collected[from][what] = amount
+        else
+            collected[from][what] += amount
+        end
+        writefile("session.json",game:GetService("HttpService"):JSONEncode(collected))
+        if table.find(alerttokens,what) then
+            discord(false,what.." Collected!")
+        end
+    end
+end)
+local tokens = {}
+local function container()
+    local capacity = lp.CoreStats.Capacity.Value
+    local pollen = lp.CoreStats.Pollen.Value
+    return pollen/capacity
+end
+local function gethive()
+    local e =  lp:FindFirstChild("Honeycomb") and lp.Honeycomb.Value
+    if e then return e end
+    game:GetService("ReplicatedStorage").Events.ClaimHive:FireServer(6)
+    return workspace.Honeycombs.Hive6
+end
+local function gethiveballoon(hive)
+    for i,v in pairs(workspace.Balloons.HiveBalloons:GetChildren()) do
+        local root = v:FindFirstChild("BalloonRoot")
+        local body = v:FindFirstChild("BalloonBody")
+        if not root and body then return end
+        local rcp = RaycastParams.new()
+        rcp.FilterType = Enum.RaycastFilterType.Whitelist
+        rcp.FilterDescendantsInstances = {hive}
+        local raycast = workspace:Raycast(root.Position,root.CFrame.lookVector*-100,rcp) -- no better way to do this to my knowledge
+        if raycast and raycast.Instance:IsDescendantOf(hive) then
+            return v,tonumber(body.GuiAttach.Gui.BlessingBar.TextLabel.Text:match("%d+"))
+        end
+    end
+end
+for i,v in pairs(game.ReplicatedStorage.EggTypes:GetChildren()) do
+    if v.ClassName == 'Decal' then
+        local a = v.Name:gsub("Icon","")
+        tokens[v.Texture] = a
+    end
+end
+local tokenpriority = {'Glue',"MagicBean",'Glitter','TropicalDrink',"BlueExtract","RedExtract","MoonCharm",'Oil',"Micro-Converter","Neonberry","Honeysuckle",'Gumdrops','Coconut','StarJelly','Enzymes','Ticket','Strawberry','Pineapple','Blueberry','SunflowerSeed'}
+local function collect()
+    setthreadcontext(2)
+    require(game.ReplicatedStorage.Collectors.LocalCollect).Run()
+    setthreadcontext(8)
+end
+local phc = game:GetService("ReplicatedStorage").Events.PlayerHiveCommand
+local pac = game:GetService("ReplicatedStorage").Events.PlayerActivesCommand
+local h,hrp
+local function init(c)
+    h = c:WaitForChild("Humanoid")
+    hrp = c:WaitForChild("HumanoidRootPart")
+end
+local charconnect = lp.CharacterAdded:Connect(init)
+init(lp.Character)
+local function iswithinbounds(part,field)
+    local rcp = RaycastParams.new()
+    rcp.FilterType = Enum.RaycastFilterType.Whitelist
+    rcp.FilterDescendantsInstances = {field}
+    local result = workspace:Raycast(part.Position,Vector3.new(0,-100,0),rcp)
+    if result and result.Instance == field then
+        return true
+    end
+    return false
+end
+local blacklist = {}
+local ignored = {"rbxassetid://1472135114","rbxassetid://2028574353"} --honeytoken,treat
+local function filter(t)
+    local results = {}
+    for i,v in pairs(t) do
+        if not table.find(ignored,v.FrontDecal.Texture) then
+            table.insert(results,v)
+        end
+    end
+    return results
+end
+local function popstaractive()
+    local t = debug.getupvalue(require(game.ReplicatedStorage.Gui.TileDisplay).Init,2).TilesByTag
+    local bloatbuff = t["Bubble Bloat"]
+    if bloatbuff then
+        local this = bloatbuff.Obj.BG.Text.Text:gsub("x","")
+        bloatbuff = tonumber(this)
+    end
+    if not bloatbuff then bloatbuff = 0 end
+    return t["Pop Star Aura"] and bloatbuff < 5.8
+end
+local function getbestfield(names)
+    if not rotatefields then return mainfield end
+    local selected = names[1]
+    local combo = 0
+    local t = debug.getupvalue(require(game.ReplicatedStorage.Gui.TileDisplay).Init,2).TilesByTag
+    for i,v in pairs(names) do
+        local e = t[v.." Boost"]
+        if e then
+            local c = e.Combo
+            if c > combo then
+                combo = c
+                selected = v
+            end
+        end
+    end
+    return selected
+end
+local lastseen = math.huge
+local function getsprout()
+    local e = workspace.Sprouts:FindFirstChild("Sprout")
+    if e then
+        lastseen = tick()
+        local rcp = RaycastParams.new()
+        rcp.FilterType = Enum.RaycastFilterType.Whitelist
+        rcp.FilterDescendantsInstances = {workspace.FlowerZones}
+        local result = workspace:Raycast(e.Position,Vector3.new(0,-100,0),rcp)
+        if result then
+            if result.Instance.Name then
+                return e,result.Instance,0
+            end
+        end
+    end
+    return nil,nil,math.abs(tick()-lastseen)
+end
+local currentfield
+local masks = {Red = "Demon",White = "Gummy",Blue = "Diamond"}
+local function fieldhassprinkler(name)
+    local field = workspace.FlowerZones[name]
+    local rcp = RaycastParams.new()
+    rcp.FilterType = Enum.RaycastFilterType.Whitelist
+    rcp.FilterDescendantsInstances = {workspace.FlowerZones}
+    for i,v in pairs(workspace.Gadgets:GetChildren()) do
+        if v.Name == "The Supreme Saturator" and v:FindFirstChild("Base") then
+            local result = workspace:Raycast(v.Base.Position+Vector3.new(0,10,0),Vector3.new(0,-100,0),rcp)
+            if not result then return false end
+            if result.Instance.Name == name then return true end
+        end
+    end
+    return false
+end
+local function ground(pos)
+    if typeof(pos) == "CFrame" then pos = pos.Position end
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Whitelist
+    params.FilterDescendantsInstances = {workspace.Map.Ground,workspace.Decorations.Stump.Part}
+    local result = workspace:Raycast(pos + Vector3.new(0,10,0),Vector3.new(0,-100,0),params)
+    if result then return result.Position+Vector3.new(0,3,0) end
+end
+local function bugspresent(field)
+    for i,v in pairs(workspace.Monsters:GetChildren()) do
+        if not v.Name:find("Stump Snail") and not v.Name:find("Vicious") then
+            local hrp = v.PrimaryPart
+            if hrp and getzone(hrp) == field then 
+                return true
+            end
+        end
+    end
+    return false
+end
+local pc = game:GetService("ReplicatedStorage").Events.ParachuteCommand
+local function parachute(e) --possibly to bypass any fly or velocity checks when switching locations
+    local arg = e and "Open" or "Close"
+    if not lp.Character:FindFirstChild("Glider") then
+        pc:FireServer(arg)
+    end
+end
+local raycastignored = {workspace.Territories,workspace.Particles,lp.Character,workspace.MonsterSpawners,workspace.Bees,workspace.Sprouts,workspace.Collectibles,workspace.Happenings,workspace.Balloons,workspace.FlowerZones,workspace.Flowers,workspace.Planters}
+for i,v in pairs(workspace:GetChildren()) do
+    if v:IsA("Tool") then
+        table.insert(raycastignored,v)
+    end
+end
+for i,v in pairs(workspace.Decorations:GetDescendants()) do
+    if v:IsA("BasePart") and not v.CanCollide then
+        table.insert(raycastignored,v)
+    end
+end
+local function getwaypoints(origin,dest) --probably bypasses any sort of "noclip" check that this game probably has
+    local t = {origin}
+    local rcp = RaycastParams.new()
+    rcp.FilterType = Enum.RaycastFilterType.Blacklist
+    rcp.FilterDescendantsInstances = raycastignored
+    local direction = (dest-origin).Unit
+    local distance = (origin-dest).Magnitude
+    local prev,mprev,vprev = origin,origin,origin
+    for i = 1,math.floor(distance) do
+        local v = origin+direction*i
+        local result = workspace:Raycast(v+Vector3.new(0,2000,0),Vector3.new(0,-10000,0),rcp)
+        if result then
+            local p = result.Position
+            if p.Y > prev.Y and p.Y-prev.Y > 5 then
+                table.insert(t,p)
+                prev = p
+            elseif p.Y < prev.Y and prev.Y-p.Y > 5 then
+                table.insert(t,mprev)
+                prev = p
+            end
+            mprev = p
+        end
+    end
+    table.insert(t,dest)
+    return t
+end --im well aware that this function isnt perfect, but i dont care at the moment
+local ts = game:GetService("TweenService")
+local function goto(cf)
+    if type(cf) == "vector" then
+        cf = CFrame.new(cf)
+    end
+    local dir
+    local thread = coroutine.create(function()
+        while task.wait() do
+            hrp.Velocity = dir
+        end
+    end)
+    local speed = 75
+    coroutine.resume(thread)
+    for i,v in pairs(getwaypoints(hrp.Position,cf.Position)) do
+        local distance = (v-hrp.Position).Magnitude
+        dir = (v-hrp.Position).Unit*speed
+        ts:Create(hrp,TweenInfo.new(distance/speed,Enum.EasingStyle.Linear),{CFrame = CFrame.new(v)}):Play()
+        task.delay(0.15,parachute,true)
+        task.wait(distance/speed)
+        if getgenv().stop then break end
+    end
+    coroutine.close(thread)
+    task.delay(1,parachute,false)
+    h:MoveTo(cf.Position)
+end
+local function changefield(name,specificposition)
+    if name == currentfield and fieldhassprinkler(name) then return end
+    currentfield = name
+    field,total,zone = getflowers(name)
+    local hive = gethive()
+	local red,white,blue = zone:FindFirstChild("Red") and zone.Red.Value or 0,zone:FindFirstChild("White") and zone.White.Value or 0,zone:FindFirstChild("Blue") and zone.Blue.Value+0.1 or 0.1
+	local e = math.max(red,white,blue)
+    local position = specificposition and CFrame.new(ground(specificposition)) or CFrame.new(ground(zone.Position))
+	local color = e == red and "Red" or e == white and "White" or e == blue and "Blue"
+	--game:GetService("ReplicatedStorage").Events.ItemPackageEvent:InvokeServer("Equip",{Mute = false,Type = masks[color].." Mask",Category = "Accessory"})
+    if not fieldhassprinkler(name) then
+        repeat
+            goto(position)
+            task.wait(.05)
+            pac:FireServer({Name = 'Sprinkler Builder'})
+            task.wait(.5)
+        until fieldhassprinkler(name)
+    end
+end
+local function getbubble()
+    local pos = hrp.Position
+    local m = math.huge
+    local selected
+    for i,v in pairs(workspace.Particles:GetChildren()) do
+        if v.Name == "Bubble" and not table.find(blacklist,v) and tostring(getzone(v)) == currentfield then
+            local magnitude = (pos-v.Position).Magnitude
+            if magnitude < m then
+                m = magnitude
+                selected = v
+            end
+        end
+    end
+    return selected,m
+end
+local function balloonlow(hive)
+    local ostime = require(game.ReplicatedStorage.OsTime)
+    local t = debug.getupvalue(require(game.ReplicatedStorage.Gui.TileDisplay).Init,2).TilesByTag["Balloon Blessing"]
+    if not t or not gethiveballoon(hive) then return false end
+    local a = t.TimerDur
+    local b = ostime()
+    local c = a-(math.floor(b)-t.TimerStart)
+    local d = c/3600
+    return d < 0.25
+end
+local function getprioritizedtoken(field)
+    local t = {}
+    local lowest = math.huge
+    local pos = hrp.Position
+    local maxindex = #tokenpriority+1
+    for i,v in pairs(workspace.Collectibles:GetChildren()) do
+        if not table.find(blacklist,v) and v.Transparency == 0 and tostring(getzone(v)) == currentfield and not table.find(ignored,v.FrontDecal.Texture) then
+            local priority = table.find(tokenpriority,tokens[v.FrontDecal.Texture]) or maxindex
+            local index = t[priority]
+            if not index then
+                index = {}
+                t[priority] = index
+            end
+            table.insert(index,v)
+            if priority < lowest then lowest = priority end
+        end
+    end
+    local e = t[lowest]
+    if not e then return end
+    table.sort(e,function(a,b)
+        return (a.Position-pos).Magnitude < (b.Position-pos).Magnitude
+    end)
+    local selected = e[1]
+    table.insert(blacklist,selected)
+    return selected,lowest~=maxindex
+end
+local t = debug.getupvalue(require(game.ReplicatedStorage.Gui.TileDisplay).Init,2).TilesByTag["Balloon Blessing"]
+local currentblessing = t and t.Combo or 0
+local dispensers = {
+    "Wealth Clock",
+    "Strawberry Dispenser",
+    "Red Field Booster",
+    "Glue Dispenser",
+    "Free Ant Pass Dispenser",
+    "Field Booster",
+    "Blue Field Booster",
+    "Blueberry Dispenser",
+    "Coconut Dispenser"
+    --remember to add the samovar when it comes (cuz its op)
+}
+local ohandthisone = coroutine.create(function()
+    local event = game:GetService("ReplicatedStorage").Events.ToyEvent
+    while true do
+        for i,v in pairs(dispensers) do
+            local data = require(game.ReplicatedStorage.ClientStatCache).Get()
+            local t = os.time()-data.ToyTimes[v]
+            local e = workspace.Toys[v].Cooldown.Value-t
+            if e < 0 then
+                event:FireServer(v)
+            end
+        end
+        task.wait(1)
+    end
+end)
+coroutine.resume(ohandthisone)
+local thisthread = coroutine.create(function()
+    while task.wait(.2) do
+        collect()
+    end
+end)
+coroutine.resume(thisthread)
+local andthisthread = coroutine.create(function()
+    local remote = game.RobloxReplicatedStorage.GetServerVersion
+    while true do
+        local ping
+        coroutine.wrap(function()
+            ping = remote:InvokeServer()
+        end)()
+        task.wait(10)
+        if not ping then
+            discord(true,"Client Disconnect.")
+            game:Shutdown()
+            break
+        end
+    end
+end)
+coroutine.resume(andthisthread)
+local bluefields = {"Pine Tree Forest","Bamboo Field","Blue Flower Field"}
+local function moveto(part,dest,additionaltime,override)
+    local time = (part.Position-dest).Magnitude/h.WalkSpeed
+    if time < 5 and tostring(getzone(part)) == currentfield or override then
+        h:MoveTo(dest)
+        task.wait(time+(additionaltime or 0))
+    else
+        goto(CFrame.new(dest))
+    end
+end
+local hive = gethive()
+local function useinstantconverter()
+    game:GetService("ReplicatedStorage").Events.PlayerActivesCommand:FireServer({Name = "Micro-Converter"})
+end
+local function gethealth(puffshroom)
+    return 1
+end
+local function beesnearby()
+    local amount = 0
+    local pos = game.Players.LocalPlayer.Character.HumanoidRootPart.Position
+    for i,v in pairs(workspace.Bees:GetChildren()) do
+        if (v.Position-pos).Magnitude < 20 then
+            amount+=1
+        end
+    end
+    return amount
+end
+local rarities = {"Mythic","Legendary","Epic","Rare","Common"} --had it as "Mythical" for a long ass time
+local function getpuffshroom()
+    local selected,mselected
+    local pos = hrp.Position
+    local rarity = math.huge
+    local magnitude = math.huge
+    local level = 0
+    for i,v in pairs(workspace.Happenings.Puffshrooms:GetChildren()) do
+        local r = table.find(rarities,v.Name:sub(22))
+        if r then
+            local l = tonumber(getlevel(v))
+            if not l then return end
+            if r < rarity then
+                selected,level,rarity = v,l,r
+            elseif r == rarity and l > level then
+                selected,level,rarity = v,l,r
+            end
+        end
+    end
+    if selected then
+        local zone = getzone(selected:FindFirstChild("Puffball Top"))
+        return selected,zone
+    else
+        return workspace.Particles:FindFirstChild("SporeCloud")
+    end
+end
+local function getnearesttokentopart(part)
+    local position = part.Position
+    local m = 25
+    local selected
+    for i,v in pairs(workspace.Collectibles:GetChildren()) do
+        if not table.find(blacklist,v) and v.Transparency == 0 then
+            local magnitude = (v.Position-position).Magnitude
+            local name = tokens[v.FrontDecal.Texture] or ""
+            if (magnitude < m) or name:find("Wax") then
+                m = magnitude
+                selected = v
+            end
+        end
+    end
+    if selected then
+        table.insert(blacklist,selected)
+        task.delay(1,table.remove,blacklist,table.find(blacklist,selected))
+    end
+    return selected
+end
+local function getalltokensnearpart(part,radius)
+    local t = {}
+    local radius = radius or 30
+    local position = part.Position
+    for i,v in pairs(workspace.Collectibles:GetChildren()) do
+        local magnitude = (v.Position-position).Magnitude
+        local name = tokens[v.FrontDecal.Texture] or ""
+        if ((magnitude < radius and v.Transparency == 0) or name:find("Wax")) and not table.find(ignored,v.FrontDecal.Texture) and tokens[v.FrontDecal.Texture] then
+            table.insert(t,v)
+        end
+    end
+    table.sort(t,function(a,b)
+        return (a.Position-position).Magnitude < (b.Position-position).Magnitude
+    end)
+    return t
+end
+local function makehoney()
+    local maxblessing = 45 -- the balloons bleed FAST after a certain point
+    game:GetService("ReplicatedStorage").Events.SelectNPCOption:FireServer("GBTeleportToHive") --safety precaution i guess (server-side teleport method)
+    hrp.Velocity = Vector3.new()
+    repeat
+        if hive.Phase.Value ~= "ProducingHoney" then
+            phc:FireServer("ToggleHoneyMaking")
+        end
+        task.wait(1) 
+    until container() == 0 or getgenv().stop
+    local balloon,blessing = gethiveballoon(hive)
+    if balloon and (blessing > currentblessing) or currentblessing >= maxblessing or balloonlow(hive) and not getpuffshroom() then
+        local a
+        repeat
+            if hive.Phase.Value ~= "ProducingHoney" then
+                phc:FireServer("ToggleHoneyMaking")
+            end
+            if not balloonlow(hive) then
+                a = getsprout()
+            end
+            task.wait(1)
+        until not gethiveballoon(hive) or a or getgenv().stop or getpuffshroom()
+        if not gethiveballoon(hive) then
+            if blessing > currentblessing then
+                currentblessing = blessing
+            end
+        end
+    end
+    task.wait(1)
+    if not zone then return end
+    goto(zone.CFrame)
+end
+local stardisksize = Vector3.new(8,.4,8)
+local stardisks = {}
+local coconutdisks = {}
+local disklistener = workspace.Particles.ChildAdded:Connect(function(e)
+    task.wait(.5)
+    if e.Name == "WarningDisk" and e.BrickColor == BrickColor.new("Lime green") then
+        if e.Size == stardisksize then
+            table.insert(stardisks,e)
+        else
+            table.insert(coconutdisks,e)
+        end
+    end
+end)
+local disklistener1 = workspace.Particles.ChildRemoved:Connect(function(e)
+    if table.find(stardisks,e) then
+        table.remove(stardisks,table.find(stardisks,e))
+    elseif table.find(coconutdisks,e) then
+        table.remove(coconutdisks,table.find(coconutdisks,e))
+    end
+end)
+local function getdisk()
+    local selected
+    local m = math.huge
+    local pos = hrp.Position
+    for i,v in pairs(stardisks) do
+        local magnitude = (v.Position-pos).Magnitude
+        if magnitude < m then
+            m = magnitude
+            selected = v
+        end
+    end
+    return selected
+    --disabled coconuts here cuz they are quantumly useless (why even have them in the game)
+    --i didnt even know how bad they were until i made this
+end
+local function feed(type,amount) --this has to be here cuz the game doesnt automatically update quest progress
+    setthreadcontext(2) -- for some reason i need this to call modulescripts (never had this issue before)
+    local t = require(game.ReplicatedStorage.HoneycombTools).BuildEditor(type,"Eggs")
+    local t2 = require(game.ReplicatedStorage.Gui.QuantityBox)
+    local old = t2.Ask
+    t2.Ask = function()
+        t2.Ask = old
+        return amount,false
+    end
+    local lp = game.Players.LocalPlayer
+    local proxy = {Y=7,X=3,Type="BuoyantBee",Eligable=true,Body=lp.Honeycomb.Value.Cells["C3,7"]}
+    t.ConstructCell(type,3,7,proxy)
+    setthreadcontext(8)
+end
+local function antchallengeactive()
+    local t = debug.getupvalue(require(game.ReplicatedStorage.Gui.TileDisplay).Init,2).TilesByTag
+    return t["Ant Challenge"] and true or false
+end
+local function doantchallenge()
+    if antchallengeactive() then return end
+    goto(CFrame.new(ground(workspace.Toys["Ant Challenge"].Platform.CFrame)))
+    local data = require(game.ReplicatedStorage.ClientStatCache).Get()
+    if data.Eggs.AntPass < 1 then
+        game:GetService("ReplicatedStorage").Events.ToyEvent:FireServer("Ant Pass Dispenser")
+    end
+    repeat task.wait(.1) until beesnearby() > 40
+    repeat
+        game:GetService("ReplicatedStorage").Events.ToyEvent:FireServer("Ant Challenge")
+        task.wait(1)
+    until antchallengeactive()
+    local c = workspace.Monsters.ChildAdded:Connect(function(e)
+        local hrp = e:WaitForChild("HumanoidRootPart",2) --for some reason the primarypart of the model isnt immediatly set
+        if not hrp then return end
+        hrp.Size = hrp.Size*5
+        hrp.CanCollide = true
+        hrp.CollisionGroup = "penis"
+    end)
+    pac:FireServer({Name = 'Sprinkler Builder'})
+    local field = workspace.FlowerZones["Ant Field"]
+    while antchallengeactive() and not getgenv().stop do
+        task.wait(.5)
+        for i,v in pairs(workspace.Collectibles:GetChildren()) do
+            if v:FindFirstChild("FrontDecal") and v.FrontDecal.Texture == "rbxassetid://1629547638" and tostring(getzone(v)) == "Ant Field" then
+                hrp.CFrame = v.CFrame
+                task.wait(.5)
+                hrp.CFrame = CFrame.new(ground(field.Position))
+                break
+            end
+        end
+    end
+    c:Disconnect()
+    task.wait(1)
+end
+local function getquest(name)
+    local t = require(game.ReplicatedStorage.RepeatQuests).GetQuests()
+    local data = require(game.ReplicatedStorage.ClientStatCache).Get()
+    local quests = require(game.ReplicatedStorage.Quests)
+    local bucko = require(game.ReplicatedStorage.RepeatQuests[name])
+    local quest,questname,tasks
+    for i,v in pairs(data.Quests.Active) do
+        if v.Name:find(name) then
+            quest = v
+            questname = v.Name
+        end
+    end
+    if not quest then return end
+    setidentity(2) -- this is necessary for some reason
+    quest = quests:Progress(questname,data)
+    setidentity(8)
+    for i,v in pairs(bucko.Quests) do
+        if v.Name == questname then
+            tasks = v.Tasks
+        end
+    end
+    return tasks,quest
+end
+local function doquest(t,q,name)
+    local questcomplete = true
+    for i,v in pairs(t) do
+        if q[i][1] < 1 then
+            questcomplete = false
+            if v.Type == "Collect Pollen" or v.Type == "Collect Goo" then
+                if v.Zone then
+                    changefield(v.Zone)
+                    return true
+                end
+            elseif v.Type == "Defeat Monsters" then
+                if v.MonsterType:find("Ant") then
+                    doantchallenge()
+                    return true
+                else
+                    for i2,v2 in pairs(workspace.MonsterSpawners:GetChildren()) do
+                        if v2.MonsterType.Value == v.MonsterType and not v2:FindFirstChildOfClass("Attachment").TimerGui.TimerLabel.Visible then
+                            changefield(v2.Territory.Value.Name)
+                            return true
+                        end
+                    end
+                end
+            elseif v.Type == "Use Items" then
+                local amount = q[i][3]-q[i][2]
+                local type = v.Item
+                feed(type,amount)
+            end
+        end 
+    end
+    if questcomplete then
+        local events = game:GetService("ReplicatedStorage").Events
+        events.CompleteQuestFromPool:FireServer(name)
+        events.GiveQuestFromPool:FireServer(name)
+    end
+    return false
+end
+local planterfields = {
+    ["Petal Planter"] = {
+        "Coconut Field",
+        "Dandelion Field",
+        "Pineapple Patch",
+        "Pumpkin Patch",
+        "Sunflower Field"
+    },
+    ["Pesticide Planter"] = {
+        "Strawberry Field",
+        "Spider Field",
+        "Mushroom Field"
+    },
+    ["Hydroponic Planter"] = {
+        "Pine Tree Forest",
+        "Blue Flower Field",
+        "Bamboo Field",
+        "Stump Field"
+    }
+}
+local function getplanter()
+    local t = debug.getupvalue(require(game.ReplicatedStorage.LocalPlanters).LoadPlanter,6)
+    for i,v in pairs(t) do
+        if v.IsMine and v.GrowthPercent == 1 then
+            return v,getzone(v.BulbPart)
+        end
+    end
+end
+local function collectplanter(planter,planterzone)
+    local old = hrp.CFrame
+    goto(planter.BulbPart.CFrame)
+    task.wait(1)
+    game:GetService("ReplicatedStorage").Events.PlanterModelCollect:FireServer(planter.ActorID)
+    task.wait(3)
+    local tokens = getalltokensnearpart(planter.BulbPart,50)
+    for i,v in pairs(tokens) do
+        if v.Transparency ~= 1 and v:IsDescendantOf(workspace.Collectibles) then
+            moveto(hrp,ground(v.Position),.1,true)
+        end
+    end
+    task.wait(.5)
+    local name = planter.Type.." Planter"
+    local data = planterfields[name]
+    if not data then return end
+    local currentindex = table.find(data,planterzone.Name) or 0
+    local newindex = currentindex+1
+    if newindex > #data then newindex = 1 end
+    local newfield = workspace.FlowerZones:FindFirstChild(data[newindex])
+    if newfield then
+        goto(newfield.CFrame)
+        task.wait(1)
+        game:GetService("ReplicatedStorage").Events.PlayerActivesCommand:FireServer({Name = name})
+        task.wait(1)
+    end
+    goto(old)
+end
+local function dopuffshroom(puffshroom,puffzone,part)
+    changefield(puffzone.Name,part.Position)
+    while not getgenv().stop do
+        local new = getpuffshroom()
+        local newrarity = (new and table.find(rarities,new.Name:sub(22))) or 5
+        local currentrarity = table.find(rarities,puffshroom.Name:sub(22)) or 5
+        if newrarity < currentrarity or not puffshroom.Parent or (getdisk() and gethealth(puffshroom) < 0.75) then break end
+        if container() >= 1 then
+            if data.Eggs["Micro-Converter"] > 0 then
+                useinstantconverter()
+                task.wait(1)
+            else
+                makehoney()
+            end
+        end
+        local token = getnearesttokentopart(part)
+        if token then
+            moveto(hrp,ground(token.Position))
+        else
+            moveto(hrp,ground(part.Position))
+        end
+    end
+    if not puffshroom.Parent then
+        task.wait(1.75)
+        local tokens = getalltokensnearpart(part)
+        for i,v in pairs(tokens) do
+            if getgenv().stop then break end
+            if v:IsDescendantOf(workspace.Collectibles) and v.Transparency ~= 1 then
+                moveto(hrp,ground(v.Position))
+            end
+        end
+    end
+end
+local function getfieldballoons()
+    local t = {}
+    for i,v in pairs(workspace.Balloons.FieldBalloons:GetChildren()) do
+        if v:FindFirstChild("PlayerName") and v.PlayerName.Value == lp.Name then
+            local zone = tostring(getzone(v.BalloonRoot))
+            if zone == currentfield then
+                table.insert(t,v.BalloonRoot)
+            end
+        end
+    end
+    return t
+end
+local allowedmonsters = {"Rhino Beetle","Ladybug","Mantis","Scorpion","King Beetle","Werewolf","Spider"}
+local monstertimes = {}
+local function bugrunaction()
+    local tookaction = false
+    for i,v in pairs(workspace.MonsterSpawners:GetChildren()) do
+        if table.find(allowedmonsters,v.MonsterType.Value) and v:FindFirstChild("Attachment") then
+            if not v.Attachment.TimerGui.TimerLabel.Visible then
+                local label = v.Attachment.TimerGui.TimerLabel
+                local zone = v.Territory.Value
+                if not monstertimes[zone] then
+                    monstertimes[zone] = tick()+60
+                end
+                local time = monstertimes[zone] - tick()
+                if time < 0 then
+                    local part = zone
+                    if not part:IsA("BasePart") then part = part.w end
+                    goto(part.CFrame)
+                    local currenttime = tick()
+                    repeat task.wait() until label.Visible
+                    warn("took "..tostring(tick()-currenttime).." seconds to defeat "..v.MonsterType.Value)
+                    task.wait(2)
+                    for i2,v2 in pairs(workspace.Collectibles:GetChildren()) do
+                        local gzone = getzone(v2,true)
+                        if gzone then
+                            if v2.Transparency == 0 and (gzone == zone or gzone:IsDescendantOf(zone)) and v2:FindFirstChild("FrontDecal") and not table.find(ignored,v2.FrontDecal.Texture) and tokens[v2.FrontDecal.Texture] then
+                                moveto(hrp,ground(v2.Position),0,true)
+                            end
+                        end
+                    end
+                    tookaction = true
+                    monstertimes[zone] = nil
+                end
+            end
+
+        end
+    end
+    return tookaction
+end
+local errorlistener,mainthread
+local function stopallfunctions()
+    coroutine.close(thisthread)
+    coroutine.close(andthisthread)
+    coroutine.close(ohandthisone)
+    coroutine.close(mainthread)
+    idler:Disconnect()
+    errorlistener:Disconnect()
+    connection:Disconnect()
+    charconnect:Disconnect()
+    puffshroomlistener:Disconnect()
+    puffshroomlistener1:Disconnect()
+    disklistener:Disconnect()
+    disklistener1:Disconnect()
+end
+errorlistener = game:GetService("ScriptContext").Error:Connect(function(a,b,s)
+    if s == script then
+        local message = a.."\nstack begin\n"..b.."stack end\nShutting down game..."
+        discord(true,message)
+        stopallfunctions()
+        if wasextcalled then
+            game:Shutdown()
+        end
+    end
+end)
+local function dodisks()
+    while task.wait() do
+        local disk = getdisk()
+        if not disk or getgenv().stop then break end
+        hrp.CFrame = CFrame.new(ground(disk.Position))
+    end
+end
+changefield(getbestfield(bluefields))
+mainthread = coroutine.create(function()
+    while task.wait() do
+        if getgenv().stop then
+            warn("stopped.")
+            getgenv().stop = false
+            task.defer(stopallfunctions)
+        end
+        local popstar = popstaractive()
+        local teleport = false
+        local full = container()
+        if full >= 1 and not popstar then -- the purpose of this is sometimes the character moves off the flowerzone by a picometer and then the capacity shrinks
+            task.wait(1)
+        end
+        full = container()
+        local disk = getdisk()
+        local name = "Bucko Bee"
+        local tasks,quests = getquest(name)
+        local puffshroom,puffzone = getpuffshroom()
+        local tookaction = doquests and tasks and quests and not puffshroom and doquest(tasks,quests,name)
+        local sprout,fieldblock,lastseenago = getsprout()
+        if full >= 1 and not popstar or balloonlow(hive) and lastseenago > 20 then
+            if puffshroom then
+                if (full >= 1) then
+                    useinstantconverter()
+                end
+            else
+                makehoney()
+            end
+        end
+        if puffshroom and not disk then -- the reason star shower disks are so high priority is because its the fastest way to get x10+ pollen and annihilate any high level puffshroom instantly
+            local part = puffshroom:FindFirstChild("Puffball Top")
+            if part then
+                dopuffshroom(puffshroom,puffzone,part)
+                continue --first time ever using this lua feature for some reason (its very useful)
+            elseif puffshroom.Name == "SporeCloud" then
+                goto(puffshroom.Position)
+                continue
+            end
+        end
+        if bugrunaction() then continue end
+        if sprout and not tookaction then
+            changefield(fieldblock.Name)
+        else
+            if lastseenago > 20 and not puffshroom and not tookaction then
+                changefield(getbestfield(bluefields))
+                lastseen = math.huge
+            end
+        end
+        local planter,planterzone = getplanter()
+        local balloons = getfieldballoons()
+        local balloon
+        if #balloons > 0 then
+            balloon = balloons[math.random(1,#balloons)]
+        end
+        local flower = field[math.random(1,total)]
+        local token,iscollectible = getprioritizedtoken(zone)
+        local position,item
+        if planter then
+            collectplanter(planter,planterzone)
+            continue
+        end
+        if disk then
+            position = ground(disk.Position)
+        elseif token then
+            item = token
+            position = ground(token.Position)
+            table.insert(blacklist,token)
+        elseif balloon then
+            position = ground(balloon.Position)
+        else
+            position = ground(flower.Position)
+        end
+        if popstar and not iscollectible and not sprout and not disk then
+            local bubble = getbubble()
+            if bubble then
+                item = bubble
+                position = ground(bubble.Position)
+                table.insert(blacklist,bubble)
+            end
+        end
+        if bugspresent(zone) then
+            position = zone.Position
+        end
+        moveto(hrp,position,0,teleport)
+        if item then task.delay(1,table.remove,blacklist,table.find(blacklist,item)) end
+    end
+end)
+coroutine.resume(mainthread)
+--ugh this is getting messy
