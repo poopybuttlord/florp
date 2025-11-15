@@ -1,4 +1,5 @@
 --warning: this script is filled with primitive methods because i dont want to sift through literally a thousand scripts to find the real values
+getgenv().stop = false
 local wasextcalled = debug.validlevel(2) --genius method
 local function discord(pingme,content)
     local url = 'https://discord.com/api/webhooks/1436290248274608138/oR2Fnq6UmONbR_NS61bQT7adNYfGAbmJ_sFUYjMwZmgmFb8lmdXTjA1JA2SZpuZDC7oa'
@@ -17,6 +18,7 @@ if wasextcalled then
         task.wait(3)
     end
 end
+local lookatpart,movetoposition
 local enabled = true
 local dobugruns = false
 local doquests = false
@@ -169,7 +171,11 @@ for i,v in pairs(game.ReplicatedStorage.EggTypes:GetChildren()) do
         tokens[v.Texture] = a
     end
 end
-local tokenpriority = {'Glue',"MagicBean",'Glitter','TropicalDrink',"BlueExtract","RedExtract","MoonCharm",'Oil',"Micro-Converter","Neonberry","Honeysuckle",'Gumdrops','Coconut','StarJelly','Enzymes','Ticket','Strawberry','Pineapple','Blueberry','SunflowerSeed'}
+tokens["rbxassetid://1629547638"] = "TokenLink"
+tokens["http://www.roblox.com/asset/?id=65867881"] = "Haste"
+tokens["rbxassetid://1472135114"] = "HoneyToken" -- the stupid tide popper spawns a lot of these (i hate honey tokens)
+tokens["rbxassetid://2000457501"] = "Inspire"
+local tokenpriority = {'Glue',"MagicBean",'Glitter','TropicalDrink',"BlueExtract","RedExtract","MoonCharm",'Oil',"Micro-Converter","TokenLink","Inspire","Haste","Neonberry","Honeysuckle",'Gumdrops','Coconut','StarJelly','Enzymes','Ticket','Strawberry','Pineapple','Blueberry','SunflowerSeed',"HoneyToken"}
 local function collect()
     setthreadcontext(2)
     require(game.ReplicatedStorage.Collectors.LocalCollect).Run()
@@ -181,6 +187,7 @@ local h,hrp
 local function init(c)
     h = c:WaitForChild("Humanoid")
     hrp = c:WaitForChild("HumanoidRootPart")
+    h.AutoRotate = false
 end
 local charconnect = lp.CharacterAdded:Connect(init)
 init(lp.Character)
@@ -195,7 +202,7 @@ local function iswithinbounds(part,field)
     return false
 end
 local blacklist = {}
-local ignored = {"rbxassetid://1472135114","rbxassetid://2028574353"} --honeytoken,treat
+local ignored = {"rbxassetid://2028574353"} --honeytoken,treat
 local function filter(t)
     local results = {}
     for i,v in pairs(t) do
@@ -333,7 +340,9 @@ local function getwaypoints(origin,dest) --probably bypasses any sort of "noclip
     return t
 end --im well aware that this function isnt perfect, but i dont care at the moment
 local ts = game:GetService("TweenService")
+local goingto = false
 local function goto(cf)
+    goingto = true
     if type(cf) == "vector" then
         cf = CFrame.new(cf)
     end
@@ -355,7 +364,7 @@ local function goto(cf)
     end
     coroutine.close(thread)
     task.delay(1,parachute,false)
-    h:MoveTo(cf.Position)
+    goingto = false
 end
 local function changefield(name,specificposition)
     if name == currentfield and fieldhassprinkler(name) then return end
@@ -373,7 +382,7 @@ local function changefield(name,specificposition)
             task.wait(.05)
             pac:FireServer({Name = 'Sprinkler Builder'})
             task.wait(.5)
-        until fieldhassprinkler(name)
+        until fieldhassprinkler(name) or getgenv().stop
     end
 end
 local function getbubble()
@@ -382,8 +391,8 @@ local function getbubble()
     local selected
     for i,v in pairs(workspace.Particles:GetChildren()) do
         if v.Name == "Bubble" and not table.find(blacklist,v) and tostring(getzone(v)) == currentfield then
-            local magnitude = (pos-v.Position).Magnitude
-            if magnitude < m then
+            local magnitude,magnitude2 = (pos-v.Position).Magnitude, (zone.Position-v.Position).Magnitude
+            if magnitude < m and magnitude2 < 50 then
                 m = magnitude
                 selected = v
             end
@@ -431,14 +440,14 @@ local t = debug.getupvalue(require(game.ReplicatedStorage.Gui.TileDisplay).Init,
 local currentblessing = t and t.Combo or 0
 local dispensers = {
     "Wealth Clock",
-    "Strawberry Dispenser",
-    "Red Field Booster",
+    --"Strawberry Dispenser",
+    --"Red Field Booster",
     "Glue Dispenser",
-    "Free Ant Pass Dispenser",
-    "Field Booster",
+    --"Free Ant Pass Dispenser",
+    --"Field Booster",
     "Blue Field Booster",
-    "Blueberry Dispenser",
-    "Coconut Dispenser"
+    --"Blueberry Dispenser",
+    --"Coconut Dispenser"
     --remember to add the samovar when it comes (cuz its op)
 }
 local ohandthisone = coroutine.create(function()
@@ -479,11 +488,13 @@ local andthisthread = coroutine.create(function()
 end)
 coroutine.resume(andthisthread)
 local bluefields = {"Pine Tree Forest","Bamboo Field","Blue Flower Field"}
-local function moveto(part,dest,additionaltime,override)
-    local time = (part.Position-dest).Magnitude/h.WalkSpeed
-    if time < 5 and tostring(getzone(part)) == currentfield or override then
+local function gettraveltime(dest)
+    return (hrp.Position-dest).Magnitude/h.WalkSpeed
+end
+local function moveto(dest)
+    local time = gettraveltime(dest)
+    if time < 5 and tostring(getzone(hrp)) == currentfield then
         h:MoveTo(dest)
-        task.wait(time+(additionaltime or 0))
     else
         goto(CFrame.new(dest))
     end
@@ -789,7 +800,8 @@ local planterfields = {
     ["Pesticide Planter"] = {
         "Strawberry Field",
         "Spider Field",
-        "Mushroom Field"
+        "Mushroom Field",
+        "Rose Field"
     },
     ["Hydroponic Planter"] = {
         "Pine Tree Forest",
@@ -815,7 +827,8 @@ local function collectplanter(planter,planterzone)
     local tokens = getalltokensnearpart(planter.BulbPart,50)
     for i,v in pairs(tokens) do
         if v.Transparency ~= 1 and v:IsDescendantOf(workspace.Collectibles) then
-            moveto(hrp,ground(v.Position),.1,true)
+            movetoposition = ground(v.Position)
+            task.wait(gettraveltime(movetoposition))
         end
     end
     task.wait(.5)
@@ -851,9 +864,11 @@ local function dopuffshroom(puffshroom,puffzone,part)
         end
         local token = getnearesttokentopart(part)
         if token then
-            moveto(hrp,ground(token.Position))
+            movetoposition = token.Position
+            task.wait(gettraveltime(movetoposition))
         else
-            moveto(hrp,ground(part.Position))
+            movetoposition = ground(part.Position)
+            task.wait(gettraveltime(movetoposition))
         end
     end
     if not puffshroom.Parent then
@@ -862,7 +877,8 @@ local function dopuffshroom(puffshroom,puffzone,part)
         for i,v in pairs(tokens) do
             if getgenv().stop then break end
             if v:IsDescendantOf(workspace.Collectibles) and v.Transparency ~= 1 then
-                moveto(hrp,ground(v.Position))
+                movetoposition = ground(v.Position)
+                task.wait(gettraveltime(movetoposition))
             end
         end
     end
@@ -880,16 +896,18 @@ local function getfieldballoons()
     return t
 end
 local allowedmonsters = {"Rhino Beetle","Ladybug","Mantis","Scorpion","King Beetle","Werewolf","Spider"}
+local specifictimes = {Werewolf = 200,Spider = 100}
 local monstertimes = {}
 local function bugrunaction()
     local tookaction = false
     for i,v in pairs(workspace.MonsterSpawners:GetChildren()) do
-        if table.find(allowedmonsters,v.MonsterType.Value) and v:FindFirstChild("Attachment") then
+        local monster = v.MonsterType.Value
+        if table.find(allowedmonsters,monster) and v:FindFirstChild("Attachment") then
             if not v.Attachment.TimerGui.TimerLabel.Visible then
                 local label = v.Attachment.TimerGui.TimerLabel
                 local zone = v.Territory.Value
                 if not monstertimes[zone] then
-                    monstertimes[zone] = tick()+60
+                    monstertimes[zone] = tick()+spectimes[monster] or 60
                 end
                 local time = monstertimes[zone] - tick()
                 if time < 0 then
@@ -898,13 +916,14 @@ local function bugrunaction()
                     goto(part.CFrame)
                     local currenttime = tick()
                     repeat task.wait() until label.Visible
-                    warn("took "..tostring(tick()-currenttime).." seconds to defeat "..v.MonsterType.Value)
+                    warn("took "..tostring(tick()-currenttime).." seconds to defeat "..monster)
                     task.wait(2)
                     for i2,v2 in pairs(workspace.Collectibles:GetChildren()) do
                         local gzone = getzone(v2,true)
                         if gzone then
                             if v2.Transparency == 0 and (gzone == zone or gzone:IsDescendantOf(zone)) and v2:FindFirstChild("FrontDecal") and not table.find(ignored,v2.FrontDecal.Texture) and tokens[v2.FrontDecal.Texture] then
-                                moveto(hrp,ground(v2.Position),0,true)
+                                movetoposition = ground(v2.Position)
+                                task.wait(gettraveltime(movetoposition))
                             end
                         end
                     end
@@ -917,30 +936,35 @@ local function bugrunaction()
     end
     return tookaction
 end
-local lookatpart
 local function lookat(part)
     local p = hrp.Position
     local sp = part.Position
     sp = Vector3.new(sp.X,p.Y,sp.Z)
     hrp.CFrame = CFrame.new(p,sp)
 end
-local fastthread = coroutine.create(function()
-    while task.wait() do
+local rsconnect = game:GetService("RunService").RenderStepped:Connect(function()
+    if not goingto then
+        if isabilityactive("Tidal Surge") then
+            lookatpart = getgiftedballoon() or getbestbubble()
+        else
+            lookatpart = getbestbubble()
+        end
         if lookatpart then
-            print("looking at",lookatpart)
             lookat(lookatpart)
+        end
+        if movetoposition then
+            moveto(movetoposition)
         end
     end
 end)
-coroutine.resume(fastthread)
 local errorlistener,mainthread
 local function stopallfunctions()
     coroutine.close(thisthread)
-    coroutine.close(fastthread)
     coroutine.close(andthisthread)
     coroutine.close(ohandthisone)
     coroutine.close(mainthread)
     idler:Disconnect()
+    rsconnect:Disconnect()
     errorlistener:Disconnect()
     connection:Disconnect()
     charconnect:Disconnect()
@@ -971,16 +995,15 @@ mainthread = coroutine.create(function()
     while task.wait() do
         if getgenv().stop then
             warn("stopped.")
-            getgenv().stop = false
             task.defer(stopallfunctions)
         end
         local popstar = popstaractive()
-        local teleport = false
         local full = container()
         if full >= 1 and not popstar then -- the purpose of this is sometimes the character moves off the flowerzone by a picometer and then the capacity shrinks
             task.wait(1)
         end
         full = container()
+        movetoposition = nil
         local disk = getdisk()
         local name = "Bucko Bee"
         local tasks,quests = getquest(name)
@@ -1015,11 +1038,6 @@ mainthread = coroutine.create(function()
                 lastseen = math.huge
             end
         end
-        if isabilityactive("Tidal Surge") then
-            lookatpart = getgiftedballoon()
-        else
-            lookatpart = nil
-        end
         local planter,planterzone = getplanter()
         local balloons = getfieldballoons()
         local balloon
@@ -1044,7 +1062,7 @@ mainthread = coroutine.create(function()
         else
             position = ground(flower.Position)
         end
-        if popstar and not iscollectible and not sprout and not disk then
+        if not iscollectible and not sprout and not disk then
             local bubble = getbubble()
             if bubble then
                 item = bubble
@@ -1055,7 +1073,8 @@ mainthread = coroutine.create(function()
         if bugspresent(zone) then
             position = zone.Position
         end
-        moveto(hrp,position,0,teleport)
+        movetoposition = position
+        task.wait(gettraveltime(movetoposition))
         if item then task.delay(1,table.remove,blacklist,table.find(blacklist,item)) end
     end
 end)
