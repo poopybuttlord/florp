@@ -18,6 +18,7 @@ if wasextcalled then
     end
 end
 local enabled = true
+local dobugruns = false
 local doquests = false
 local rotatefields = true
 local mainfield = "Pine Tree Forest"
@@ -301,6 +302,10 @@ for i,v in pairs(workspace.Decorations:GetDescendants()) do
         table.insert(raycastignored,v)
     end
 end
+local function isabilityactive(name)
+    local t = debug.getupvalue(require(game.ReplicatedStorage.Gui.TileDisplay).Init,2).TilesByTag
+    return t[name] ~= nil
+end
 local function getwaypoints(origin,dest) --probably bypasses any sort of "noclip" check that this game probably has
     local t = {origin}
     local rcp = RaycastParams.new()
@@ -561,6 +566,38 @@ local function getalltokensnearpart(part,radius)
         return (a.Position-position).Magnitude < (b.Position-position).Magnitude
     end)
     return t
+end
+local gold,bubblegold = BrickColor.new("Gold"),BrickColor.new("Fire Yellow")
+local function getgiftedballoon()
+    for i,v in pairs(workspace.Balloons.FieldBalloons:GetChildren()) do
+        local bb = v:FindFirstChild("BalloonBody")
+        if bb and bb.BrickColor == gold and getzone(bb) == zone then
+            return bb
+        end
+    end
+end
+local function getbestbubble()
+    local selected,g_selected
+    local magnitude,g_magnitude = 0,0
+    local p = hrp.Position
+    for i,v in pairs(workspace.Particles:GetChildren()) do
+        if v.Name == "Bubble" then
+            if v.BrickColor == bubblegold then
+                local m = (p-v.Position).Magnitude
+                if m > magnitude then
+                    g_selected = v
+                    g_magnitude = m
+                end
+            else
+                local m = (p-v.Position).Magnitude
+                if m > magnitude then
+                    selected = v
+                    magnitude = m
+                end
+            end
+        end
+    end
+    return g_selected or selected
 end
 local function makehoney()
     local maxblessing = 45 -- the balloons bleed FAST after a certain point
@@ -880,9 +917,26 @@ local function bugrunaction()
     end
     return tookaction
 end
+local lookatpart
+local function lookat(part)
+    local p = hrp.Position
+    local sp = part.Position
+    sp = Vector3.new(sp.X,p.Y,sp.Z)
+    hrp.CFrame = CFrame.new(p,sp)
+end
+local fastthread = coroutine.create(function()
+    while task.wait() do
+        if lookatpart then
+            print("looking at",lookatpart)
+            lookat(lookatpart)
+        end
+    end
+end)
+coroutine.resume(fastthread)
 local errorlistener,mainthread
 local function stopallfunctions()
     coroutine.close(thisthread)
+    coroutine.close(fastthread)
     coroutine.close(andthisthread)
     coroutine.close(ohandthisone)
     coroutine.close(mainthread)
@@ -952,7 +1006,7 @@ mainthread = coroutine.create(function()
                 continue
             end
         end
-        if bugrunaction() then continue end
+        if dobugruns and bugrunaction() then continue end
         if sprout and not tookaction then
             changefield(fieldblock.Name)
         else
@@ -960,6 +1014,11 @@ mainthread = coroutine.create(function()
                 changefield(getbestfield(bluefields))
                 lastseen = math.huge
             end
+        end
+        if isabilityactive("Tidal Surge") then
+            lookatpart = getgiftedballoon()
+        else
+            lookatpart = nil
         end
         local planter,planterzone = getplanter()
         local balloons = getfieldballoons()
