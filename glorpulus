@@ -907,7 +907,7 @@ local function bugrunaction()
                 local label = v.Attachment.TimerGui.TimerLabel
                 local zone = v.Territory.Value
                 if not monstertimes[zone] then
-                    monstertimes[zone] = tick()+spectimes[monster] or 60
+                    monstertimes[zone] = tick()+specifictimes[monster] or 60
                 end
                 local time = monstertimes[zone] - tick()
                 if time < 0 then
