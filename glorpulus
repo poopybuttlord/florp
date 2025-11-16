@@ -493,7 +493,7 @@ local function gettraveltime(dest)
 end
 local function moveto(dest)
     local time = gettraveltime(dest)
-    if time < 5 and tostring(getzone(hrp)) == currentfield then
+    if time < 5 then
         h:MoveTo(dest)
     else
         goto(CFrame.new(dest))
