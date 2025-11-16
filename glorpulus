@@ -840,11 +840,13 @@ local function collectplanter(planter,planterzone)
     if newindex > #data then newindex = 1 end
     local newfield = workspace.FlowerZones:FindFirstChild(data[newindex])
     if newfield then
+        movetoposition = newfield.Position
         goto(newfield.CFrame)
         task.wait(1)
         game:GetService("ReplicatedStorage").Events.PlayerActivesCommand:FireServer({Name = name})
         task.wait(1)
     end
+    movetoposition = old.Position
     goto(old)
 end
 local function dopuffshroom(puffshroom,puffzone,part)
@@ -913,6 +915,7 @@ local function bugrunaction()
                 if time < 0 then
                     local part = zone
                     if not part:IsA("BasePart") then part = part.w end
+                    movetoposition = part.Position
                     goto(part.CFrame)
                     local currenttime = tick()
                     repeat task.wait() until label.Visible
@@ -921,7 +924,7 @@ local function bugrunaction()
                     for i2,v2 in pairs(workspace.Collectibles:GetChildren()) do
                         local gzone = getzone(v2,true)
                         if gzone then
-                            if v2.Transparency == 0 and (gzone == zone or gzone:IsDescendantOf(zone)) and v2:FindFirstChild("FrontDecal") and not table.find(ignored,v2.FrontDecal.Texture) and tokens[v2.FrontDecal.Texture] then
+                            if v2.Transparency == 0 and (gzone == zone or gzone:IsDescendantOf(zone)) and v2:FindFirstChild("FrontDecal") and v2.FrontDecal.Texture ~= "rbxassetid://1472135114" and not table.find(ignored,v2.FrontDecal.Texture) and tokens[v2.FrontDecal.Texture] then
                                 movetoposition = ground(v2.Position)
                                 task.wait(gettraveltime(movetoposition))
                             end
@@ -1072,6 +1075,10 @@ mainthread = coroutine.create(function()
         end
         if bugspresent(zone) then
             position = zone.Position
+        end
+        if tostring(getzone(hrp)) ~= currentfield then
+            movetoposition = zone.Position
+            goto(zone.CFrame)
         end
         movetoposition = position
         task.wait(gettraveltime(movetoposition))
