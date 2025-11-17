@@ -47,12 +47,26 @@ pcall(function() --lazy
         v:Destroy()
     end
 end)
+local function getflower(pos)
+    local rcp = RaycastParams.new()
+    rcp.FilterType = Enum.RaycastFilterType.Whitelist
+    rcp.FilterDescendantsInstances = {workspace.Flowers}
+    local result = workspace:Raycast(pos+Vector3.new(0,15,0),Vector3.new(0,-100,0),rcp)
+    if result then return result.Instance end
+    return nil
+end
 local function getzone(part,includeterritories)
     if not part then return nil end
+    local pos
+    if type(part) == "vector" then
+        pos = part
+    else
+        pos = part.Position
+    end
     local rcp = RaycastParams.new()
     rcp.FilterType = Enum.RaycastFilterType.Whitelist
     rcp.FilterDescendantsInstances = {workspace.FlowerZones,includeterritories and workspace.Territories}
-    local result = workspace:Raycast(part.Position+Vector3.new(0,15,0),Vector3.new(0,-100,0),rcp)
+    local result = workspace:Raycast(pos+Vector3.new(0,15,0),Vector3.new(0,-100,0),rcp)
     if result then return result.Instance end
     return nil
 end
@@ -366,15 +380,18 @@ local function goto(cf)
     task.delay(1,parachute,false)
     goingto = false
 end
+local function getfieldcolor(field)
+    local red,white,blue = field:FindFirstChild("Red") and field.Red.Value or 0,field:FindFirstChild("White") and field.White.Value or 0,field:FindFirstChild("Blue") and field.Blue.Value or 0
+	local e = math.max(red,white,blue)
+	local color = e == red and "Red" or e == white and "White" or e == blue and "Blue"
+    return color
+end
 local function changefield(name,specificposition)
     if name == currentfield and fieldhassprinkler(name) then return end
     currentfield = name
     field,total,zone = getflowers(name)
     local hive = gethive()
-	local red,white,blue = zone:FindFirstChild("Red") and zone.Red.Value or 0,zone:FindFirstChild("White") and zone.White.Value or 0,zone:FindFirstChild("Blue") and zone.Blue.Value+0.1 or 0.1
-	local e = math.max(red,white,blue)
     local position = specificposition and CFrame.new(ground(specificposition)) or CFrame.new(ground(zone.Position))
-	local color = e == red and "Red" or e == white and "White" or e == blue and "Blue"
 	--game:GetService("ReplicatedStorage").Events.ItemPackageEvent:InvokeServer("Equip",{Mute = false,Type = masks[color].." Mask",Category = "Accessory"})
     if not fieldhassprinkler(name) then
         repeat
@@ -433,7 +450,6 @@ local function getprioritizedtoken(field)
         return (a.Position-pos).Magnitude < (b.Position-pos).Magnitude
     end)
     local selected = e[1]
-    table.insert(blacklist,selected)
     return selected,lowest~=maxindex
 end
 local t = debug.getupvalue(require(game.ReplicatedStorage.Gui.TileDisplay).Init,2).TilesByTag["Balloon Blessing"]
@@ -525,13 +541,15 @@ local function getpuffshroom()
     local level = 0
     for i,v in pairs(workspace.Happenings.Puffshrooms:GetChildren()) do
         local r = table.find(rarities,v.Name:sub(22))
-        if r then
+        if r and v:FindFirstChild("Puffball Top") then
             local l = tonumber(getlevel(v))
             if not l then return end
-            if r < rarity then
-                selected,level,rarity = v,l,r
-            elseif r == rarity and l > level then
-                selected,level,rarity = v,l,r
+            if not (getfieldcolor(getzone(v["Puffball Top"])) == "Red" and l > 12 and r < 3) then
+                if r < rarity then
+                    selected,level,rarity = v,l,r
+                elseif r == rarity and l > level then
+                    selected,level,rarity = v,l,r
+                end
             end
         end
     end
@@ -851,6 +869,11 @@ local function collectplanter(planter,planterzone)
 end
 local function dopuffshroom(puffshroom,puffzone,part)
     changefield(puffzone.Name,part.Position)
+    lookatpart = part
+    local puffshroomoffset = Vector3.new(12,0,0)
+    if not getflower(part.Position+puffshroomoffset) then
+        puffshroomoffset = puffshroomoffset*-1
+    end
     while not getgenv().stop do
         local new = getpuffshroom()
         local newrarity = (new and table.find(rarities,new.Name:sub(22))) or 5
@@ -866,10 +889,10 @@ local function dopuffshroom(puffshroom,puffzone,part)
         end
         local token = getnearesttokentopart(part)
         if token then
-            movetoposition = token.Position
+            movetoposition = ground(token.Position)
             task.wait(gettraveltime(movetoposition))
         else
-            movetoposition = ground(part.Position)
+            movetoposition = ground(part.Position+puffshroomoffset)
             task.wait(gettraveltime(movetoposition))
         end
     end
@@ -947,10 +970,12 @@ local function lookat(part)
 end
 local rsconnect = game:GetService("RunService").RenderStepped:Connect(function()
     if not goingto then
-        if isabilityactive("Tidal Surge") then
-            lookatpart = getgiftedballoon() or getbestbubble()
-        else
-            lookatpart = getbestbubble()
+        if #workspace.Happenings.Puffshrooms:GetChildren() == 0 then
+            if isabilityactive("Tidal Surge") then
+                lookatpart = getgiftedballoon() or getbestbubble()
+            else
+                lookatpart = getbestbubble()
+            end
         end
         if lookatpart then
             lookat(lookatpart)
@@ -1059,7 +1084,6 @@ mainthread = coroutine.create(function()
         elseif token then
             item = token
             position = ground(token.Position)
-            table.insert(blacklist,token)
         elseif balloon then
             position = ground(balloon.Position)
         else
@@ -1070,10 +1094,9 @@ mainthread = coroutine.create(function()
             if bubble then
                 item = bubble
                 position = ground(bubble.Position)
-                table.insert(blacklist,bubble)
             end
         end
-        if bugspresent(zone) then
+        if bugspresent(zone) and beesnearby() < 5 then
             position = zone.Position
         end
         if tostring(getzone(hrp)) ~= currentfield then
@@ -1082,7 +1105,12 @@ mainthread = coroutine.create(function()
         end
         movetoposition = position
         task.wait(gettraveltime(movetoposition))
-        if item then task.delay(1,table.remove,blacklist,table.find(blacklist,item)) end
+        if item then 
+            table.insert(blacklist,item) 
+            task.delay(1,function()
+                table.remove(blacklist,table.find(blacklist,item)) -- was causing HUGE memory leaks for a long time
+            end)
+        end
     end
 end)
 coroutine.resume(mainthread)
