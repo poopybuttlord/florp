@@ -20,7 +20,7 @@ if wasextcalled then
 end
 local lookatpart,movetoposition
 local enabled = true
-local dobugruns = false
+local dobugruns = true
 local doquests = false
 local rotatefields = true
 local mainfield = "Pine Tree Forest"
