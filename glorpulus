@@ -66,7 +66,7 @@ local function getzone(part,includeterritories)
     local rcp = RaycastParams.new()
     rcp.FilterType = Enum.RaycastFilterType.Whitelist
     rcp.FilterDescendantsInstances = {workspace.FlowerZones,includeterritories and workspace.Territories}
-    local result = workspace:Raycast(pos+Vector3.new(0,15,0),Vector3.new(0,-100,0),rcp)
+    local result = workspace:Raycast(pos+Vector3.new(0,25,0),Vector3.new(0,-100,0),rcp)
     if result then return result.Instance end
     return nil
 end
@@ -576,7 +576,9 @@ local function getnearesttokentopart(part)
     end
     if selected then
         table.insert(blacklist,selected)
-        task.delay(1,table.remove,blacklist,table.find(blacklist,selected))
+        task.delay(1,function()
+            table.remove(blacklist,table.find(blacklist,selected))
+        end)
     end
     return selected
 end
